@@ -195,7 +195,13 @@ def _main(
 
         # Print out the version of Python we built just so we can confirm it's the
         # right thing in the logs
-        subprocess.check_call([util.get_exe_path(cpython, flags, force_32bit), "-VV"])
+        # TODO: install_to isn't always there
+        subprocess.check_call(
+            [
+                util.get_exe_path(install_to or Path("install"), flags, force_32bit),
+                "-VV",
+            ]
+        )
 
 
 def add_compile_arguments(parser: argparse.ArgumentParser):
