@@ -198,7 +198,7 @@ def _main(
         # TODO: install_to isn't always there
         subprocess.check_call(
             [
-                util.get_exe_path(install_to or Path("install"), flags, force_32bit),
+                util.get_exe_path(Path(install_to), flags, force_32bit),
                 "-VV",
             ]
         )
