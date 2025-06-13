@@ -66,6 +66,10 @@ jobs:
     timeout-minutes: 1440
 
     steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libzstd-dev
       - name: Checkout benchmarking
         uses: actions/checkout@v4
       - uses: fregante/setup-git-user@v2
