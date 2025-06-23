@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 
+import argparse
 from collections import defaultdict
 import json
 import re
 import subprocess
 import sys
 from typing import Any, Iterator, Mapping, TextIO, TypeAlias
+import urllib.request
+
+
+import rich_argparse
 
 
 from bench_runner import table
@@ -31,6 +36,13 @@ def iter_lines(log: str) -> Iterator[tuple[str, str, str]]:
                     yield machine, config, subparts[1]
 
 
+def iter_local_lines(log: str) -> Iterator[tuple[str, str, str]]:
+    for line in log.splitlines():
+        parts = line.split(" ", maxsplit=1)
+        if len(parts) >= 2:
+            yield "unknown", "unknown", parts[1]
+
+
 def iter_configs(configs: Mapping[str, Any]) -> Iterator[tuple[str, Any]]:
     for default in ("default", "pystats"):
         if default in configs:
@@ -48,21 +60,34 @@ def get_last_weekly_run_id() -> str:
     return content[0]["databaseId"]
 
 
-def get_log(run_id: str) -> str:
+def get_github_log(run_id: str) -> str:
     return subprocess.check_output(["gh", "run", "view", "--log", str(run_id)]).decode(
         "utf-8"
     )
 
 
-def parse_log(content: str) -> Failures:
-    failures = defaultdict(lambda: defaultdict(dict))
+def get_local_logs(log_files: list[str]) -> str:
+    if not log_files:
+        raise ValueError("No log files provided")
+    content = []
+    for log_file in log_files:
+        if log_file.startswith("http://") or log_file.startswith("https://"):
+            with urllib.request.urlopen(log_file) as response:
+                log = response.read().decode("utf-8")
+        else:
+            with open(log_file, "r", encoding="utf-8") as fd:
+                log = fd.read()
+        content.append(log)
+    return "\n".join(content)
 
-    iter = iter_lines(content)
+
+def parse_log(lines: Iterator[tuple[str, str, str]]) -> Failures:
+    failures = defaultdict(lambda: defaultdict(dict))
 
     collected_lines = []
     current_benchmark_build = None
     current_benchmark_run = None
-    for machine, config, line in iter:
+    for machine, config, line in lines:
         if match := re.match(r"\(.+\) creating venv for benchmark \((.+)\)", line):
             current_benchmark_build = match.groups()[0]
             collected_lines = []
@@ -120,14 +145,33 @@ def write_output(fd: TextIO, failures: Failures) -> None:
                 )
 
 
-def _main():
-    last_run_id = get_last_weekly_run_id()
-    failures = parse_log(get_log(last_run_id))
+def _main(log_files: list[str] | None) -> None:
+    if log_files is None:
+        lines = iter_lines(get_github_log(get_last_weekly_run_id()))
+    else:
+        lines = iter_local_lines(get_local_logs(log_files))
+    failures = parse_log(lines)
     write_output(sys.stdout, failures)
 
 
 def main():
-    _main()
+    parser = argparse.ArgumentParser(
+        description="""
+        Find benchmarks that failed in a benchmark run log.
+        """,
+        formatter_class=rich_argparse.ArgumentDefaultsRichHelpFormatter,
+    )
+
+    parser.add_argument(
+        "log",
+        nargs="*",
+        type=str,
+        help="Log files to parse.  May be local files or https urls. "
+        "If not provided, will fetch the most recent weekly logs from GitHub.",
+    )
+    args = parser.parse_args()
+
+    _main(args.log)
 
 
 if __name__ == "__main__":
