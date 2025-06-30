@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Bisecting based on pystats
+
+You can now run a bisect a benchmark based on the value of a specified pystat.
+
 ### Bugfixes
 
 #### Use PGO on weekly builds
